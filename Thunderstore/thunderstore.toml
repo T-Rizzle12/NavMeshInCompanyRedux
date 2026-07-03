@@ -1,0 +1,35 @@
+[config]
+schemaVersion = "0.0.1"
+
+[general]
+repository = "https://thunderstore.io"
+
+[package]
+description = "[V81] Enables the use of AI pathfinding and navigation in the Company Building allowing the spawning of Enemies."
+websiteUrl = "https://github.com/T-Rizzle12/Lethal-Bots"
+containsNsfwContent = false
+[package.dependencies]
+BepInEx-BepInExPack = "5.4.2305"
+
+[build]
+icon = "./icon.png"
+readme = "./README.md"
+outdir = "./Packages"
+
+[[build.copy]]
+source = "../bin/Release/netstandard2.1/NavMeshInCompanyRedux.dll"
+target = "plugins/TRizzle-NavMeshInCompanyRedux/"
+
+[[build.copy]]
+source = "../UnityProject/AssetBundles/StandaloneWindows/companybuildingnavmesh"
+target = "plugins/TRizzle-NavMeshInCompanyRedux/"
+
+[[build.copy]]
+source = "./CHANGELOG.md"
+target = "/"
+
+[publish]
+communities = [ "lethal-company", ]
+[publish.categories]
+# Get the list of categories from https://thunderstore.io/api/experimental/community/lethal-company/category/
+lethal-company = [ "bepinex", "clientside", "tweaks-and-quality-of-life", "misc", "mods", ]
