@@ -1,6 +1,8 @@
 # NavMeshInCompany Redux
 Enables the use of AI pathfinding and navigation in the Company Building allowing the spawning of Enemies.
 
+You can download the mod here: https://thunderstore.io/c/lethal-company/p/TRizzle/NavMeshInCompanyRedux/
+
 This is an updated version of NavMeshInCompany rebuilt from the ground up.
 
 Here are some changes in this one compared to the previous:
