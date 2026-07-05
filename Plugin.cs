@@ -1,8 +1,12 @@
 ﻿using BepInEx;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using Unity.AI.Navigation;
 using UnityEngine;
 using UnityEngine.AI;
@@ -25,7 +29,10 @@ namespace NavMeshInCompanyRedux
         public static AssetBundle ModAssets = null!;
         internal static string DirectoryName = null!;
         internal static GameObject CompanyBuildingNavMeshPrefab = null!;
+
         internal static new ManualLogSource Logger = null!;
+        public static new Config Config = null!;
+        
         private readonly Harmony _harmony = new(MyPluginInfo.PLUGIN_GUID);
 
         private void Awake()
@@ -34,6 +41,7 @@ namespace NavMeshInCompanyRedux
             DirectoryName = Path.GetDirectoryName(Info.Location);
 
             Logger = base.Logger;
+            Config = new Config(base.Config);
 
             // Load mod assets from Unity
             ModAssets = AssetBundle.LoadFromFile(Path.Combine(DirectoryName, bundleName));
@@ -74,10 +82,83 @@ namespace NavMeshInCompanyRedux
 
             try
             {
-                Plugin.Logger.LogInfo("Instantiating Company Navigation!");
+                Plugin.LogInfo("Instantiating Company Navigation!");
+
+                // We can't rebuild with some of the default Meshes, as it will break dynamic regeneration since some parts of the company building
+                // have read/write disabled on the mesh colliders, which will cause the navmesh to not be built correctly.
+                GameObject[] sceneObjects = scene.GetRootGameObjects();
+                if (sceneObjects != null && sceneObjects.Length > 0) 
+                {
+                    // Check all the root objects in the scene for any MeshFilters that need to be replaced with our own meshes.
+                    for (int i = 0; i < sceneObjects.Length; i++)
+                    {
+                        // Sanity check for null, just in case.
+                        GameObject gameObject = sceneObjects[i];
+                        if (gameObject != null)
+                        {
+                            // Get all MeshFilters in the root object and its children, including inactive ones.
+                            MeshFilter[] meshFilters = gameObject.GetComponentsInChildren<MeshFilter>(includeInactive: true);
+                            for (int j = 0; j < meshFilters.Length; j++)
+                            {
+                                // Sanity check for null, just in case.
+                                MeshFilter meshFilter = meshFilters[j];
+                                if (meshFilter != null)
+                                {
+                                    int instanceID = meshFilter.gameObject.GetInstanceID();
+                                    string objectName = meshFilter.gameObject.name;
+                                    //Plugin.LogDebug($"Found GameObject: {objectName} with InstanceID: {instanceID}");
+                                    if (objectName.Equals("Cube.005", StringComparison.InvariantCultureIgnoreCase)) // Cube.005 instanceID == 159178
+                                    {
+                                        //Mesh newMesh = ModAssets.LoadAsset<Mesh>("Cube.005");
+                                        //Material[] oldMaterials = meshRenderer.materials;
+                                        //GameObject replacementObject = new GameObject("Cube.005");
+                                        //replacementObject.AddComponent<MeshRenderer>().materials = oldMaterials;
+                                        //replacementObject.AddComponent<MeshFilter>().sharedMesh = newMesh;
+                                        //replacementObject.AddComponent<MeshCollider>().sharedMesh = newMesh;
+                                        Mesh newMesh = ModAssets.LoadAsset<Mesh>("Cube.005");
+                                        meshFilter.sharedMesh = newMesh;
+                                        meshFilter.gameObject.GetComponent<MeshCollider>()?.sharedMesh = newMesh;
+                                        Plugin.LogDebug($"Replaced mesh for {objectName} with new mesh: {newMesh.name}. Read/Write {newMesh.isReadable}");
+                                    }
+                                    //else if (instanceID == 157752) // Cube 157752, old 158678
+                                    //{
+                                    //    Mesh newMesh = ModAssets.LoadAsset<Mesh>("Cube");
+                                    //    meshFilter.sharedMesh = newMesh;
+                                    //    meshFilter.gameObject.GetComponent<MeshCollider>()?.sharedMesh = newMesh;
+                                    //    Plugin.LogInfo($"Replaced mesh for {meshFilter.gameObject.name} with new mesh: {newMesh.name}. Read/Write {newMesh.isReadable}");
+                                    //}
+                                    else if (objectName.Equals("Cylinder", StringComparison.InvariantCultureIgnoreCase)) // Cylinder instanceID == 158970
+                                    {
+                                        Mesh newMesh = ModAssets.LoadAsset<Mesh>("Cylinder");
+                                        meshFilter.sharedMesh = newMesh;
+                                        meshFilter.gameObject.GetComponent<MeshCollider>()?.sharedMesh = newMesh;
+                                        Plugin.LogDebug($"Replaced mesh for {objectName} with new mesh: {newMesh.name}. Read/Write {newMesh.isReadable}");
+                                    }
+                                    else if (objectName.Equals("DrillPlatform", StringComparison.InvariantCultureIgnoreCase)) // DrillPlatform instanceID == 158940
+                                    {
+                                        Mesh newMesh = ModAssets.LoadAsset<Mesh>("DrillPlatform");
+                                        meshFilter.sharedMesh = newMesh;
+                                        meshFilter.gameObject.GetComponent<MeshCollider>()?.sharedMesh = newMesh;
+                                        Plugin.LogDebug($"Replaced mesh for {objectName} with new mesh: {newMesh.name}. Read/Write {newMesh.isReadable}");
+                                    }
+                                    else if (objectName.Equals("Elbow Joint.001", StringComparison.InvariantCultureIgnoreCase)) // Elbow Joint.001 instanceID == 158958
+                                    {
+                                        Mesh newMesh = ModAssets.LoadAsset<Mesh>("Elbow Joint.001");
+                                        meshFilter.sharedMesh = newMesh;
+                                        meshFilter.gameObject.GetComponent<MeshCollider>()?.sharedMesh = newMesh;
+                                        Plugin.LogDebug($"Replaced mesh for {objectName} with new mesh: {newMesh.name}. Read/Write {newMesh.isReadable}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Check if we already have a navmesh in the scene, if so, just use that one instead of instantiating a new one.
                 Transform? companyTransform = GameObject.Find("CompanyBuildingNavMesh")?.transform; // If we already have a navmesh, just use that one instead!
                 if (companyTransform == null)
                 {
+                    // Destroy any existing AI nodes in the scene, as they will be replaced by the new ones in our prefab.
                     GameObject[] array = GameObject.FindGameObjectsWithTag("OutsideAINode");
                     for (int i = 0; i < array.Length; i++)
                     {
@@ -96,7 +177,7 @@ namespace NavMeshInCompanyRedux
                 if (navMeshColliders != null)
                 {
                     // Move to the NavMeshColliders object.
-                    Plugin.Logger.LogInfo("Found NavMeshColliders!");
+                    Plugin.LogInfo("Found NavMeshColliders!");
                     companyTransform.SetParent(navMeshColliders.transform, worldPositionStays: true);
                     companyTransform.position = navMeshColliders.transform.position;
                     companyTransform.rotation = navMeshColliders.transform.rotation;
@@ -104,14 +185,14 @@ namespace NavMeshInCompanyRedux
                     Transform oldShipNav = navMeshColliders.transform.Find("PlayerShip");
                     if (oldShipNav != null)
                     {
-                        Plugin.Logger.LogInfo("Found old ShipNavmesh, destroying it!");
+                        Plugin.LogInfo("Found old ShipNavmesh, destroying it!");
                         UnityEngine.Object.DestroyImmediate(oldShipNav.gameObject);
                     }
                 }
                 else
                 {
                     // As where it is located in the Unity Editor.
-                    Plugin.Logger.LogWarning("Failed to find NavMeshColliders!");
+                    Plugin.LogWarning("Failed to find NavMeshColliders!");
                     UnityEngine.Object.Destroy(companyTransform.gameObject);
                     return;
                 }
@@ -132,42 +213,16 @@ namespace NavMeshInCompanyRedux
                 }
 
                 // Update the NavMeshSurface component to ensure the navmesh is built and up-to-date.
-                // Can't rebuild at the minute, as it will break since some parts of the company building
-                // have read/write disabled on the mesh colliders, which will cause the navmesh to not be built correctly.
-                // TODO: Find a way to override the read/write disabled setting on the mesh colliders.
-                bool shouldRebuildNavMesh = false; // Not const to avoid compiler from removing the code below it.
-                if (shouldRebuildNavMesh)
+                if (Plugin.Config.EnableDynamicRegen.Value)
                 {
                     NavMeshSurface[] navMeshSurfaces = companyTransform.gameObject.GetComponentsInChildren<NavMeshSurface>(includeInactive: true);
                     if (navMeshSurfaces == null || navMeshSurfaces.Length == 0)
                     {
-                        Plugin.Logger.LogError("Failed to find any NavMeshSurface components on the instantiated prefab.");
+                        Plugin.LogError("Failed to find any NavMeshSurface components on the instantiated prefab.");
                         return;
                     }
 
-                    foreach (NavMeshSurface navMeshSurface in navMeshSurfaces)
-                    {
-                        // Make this is enabled!
-                        bool wasEnabled = navMeshSurface.enabled;
-                        navMeshSurface.enabled = true;
-
-                        // If the navmesh data already exists, we can use async update to avoid blocking the main thread.
-                        // If it doesn't exist, we need to build it synchronously.
-                        // TODO: Look into how BuildNavMesh creates the NavMeshData and see if we could build our own
-                        // to avoid the synchronous call.
-                        NavMeshData? navMeshData = navMeshSurface.navMeshData;
-                        if (navMeshData != null)
-                        {
-                            navMeshSurface.UpdateNavMesh(navMeshData);
-                        }
-                        else
-                        {
-                            navMeshSurface.BuildNavMesh();
-                        }
-
-                        // Set enabled status back to how it was before
-                        navMeshSurface.enabled = wasEnabled;
-                    }
+                    instanceRM.StartCoroutine(UpdateNavmeshDelayed(navMeshSurfaces));
                 }
 
                 // Now, we need to update start and endpoints of the NavMeshLink and OffMeshLink components.
@@ -190,6 +245,104 @@ namespace NavMeshInCompanyRedux
             {
                 Plugin.Logger.LogError($"Exception occurred: {exception}");
             }
+        }
+
+        private static IEnumerator UpdateNavmeshDelayed(NavMeshSurface[] surfacesToRebake)
+        {
+            // Wait for a short delay to allow any mod added buildings to be spawned before we rebuild the navmesh.
+            if (Plugin.Config.DeferedDynamicRegen.Value)
+            {
+                // Most mod-added buildings are spawned after the "level" generation is complete.
+                // The base game uses a 0.3 second delay before marking generation as complete.
+                // So this delay should be long enough to allow any mod added buildings to be spawned before we rebuild the navmesh.
+                Plugin.LogDebug("Waiting 1 second before rebaking the navmesh to allow any mod added buildings to be spawned.");
+                yield return new WaitForSeconds(1.0f);
+            }
+
+            // Lets go and rebake the navmesh for all the surfaces we found!
+            foreach (var navMeshSurface in surfacesToRebake)
+            {
+                if (navMeshSurface != null)
+                {
+                    // Log about what we are updating!
+                    Plugin.LogDebug($"Updating NavMesh for surface {navMeshSurface.gameObject.name} with {navMeshSurface.GetComponentsInChildren<NavMeshModifierVolume>().Length} modifiers.");
+
+                    // Make this is enabled!
+                    bool wasEnabled = navMeshSurface.enabled;
+                    navMeshSurface.enabled = true;
+
+                    // Build our new mesh!
+                    // If the navmesh data already exists, we can use async update to avoid blocking the main thread.
+                    NavMeshData? navMeshData = navMeshSurface.navMeshData;
+                    if (navMeshData != null)
+                    {
+                        AsyncOperation asyncOperation = navMeshSurface.UpdateNavMesh(navMeshData);
+                        while (asyncOperation != null && !asyncOperation.isDone)
+                        {
+                            yield return null;
+                        }
+                    }
+                    else
+                    {
+                        navMeshSurface.BuildNavMesh();
+                    }
+
+                    // Update the NavMeshData!
+                    Plugin.LogDebug($"UpdateNavMesh finished, refreshing surface data.");
+                    navMeshSurface.RemoveData();
+                    Plugin.LogDebug("Removed existing data.");
+
+                    // Only add the data back if it was enabled before,
+                    // otherwise we will leave it disabled.
+                    if (wasEnabled)
+                    {
+                        navMeshSurface.AddData();
+                        Plugin.LogDebug("Added updated data.");
+                    }
+
+                    // Set enabled status back to how it was before
+                    navMeshSurface.enabled = wasEnabled;
+                }
+                else
+                {
+                    Plugin.LogWarning("Found a null NavMeshSurface in the list to rebake, skipping it.");
+                }
+            }
+
+            Plugin.LogDebug("Updated all given NavMeshes.");
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void LogDebug(string debugLog)
+        {
+            if (Config.EnableDebugLog.Value)
+            {
+                Logger.LogDebug(debugLog);
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void LogInfo(string infoLog)
+        {
+            Logger.LogInfo(infoLog);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void LogWarning(string warningLog)
+        {
+            Logger.LogWarning(warningLog);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void LogError(string errorLog)
+        {
+            Logger.LogError(errorLog);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void LogFatal(string errorLog)
+        {
+            Logger.LogFatal(errorLog);
         }
     }
 }
