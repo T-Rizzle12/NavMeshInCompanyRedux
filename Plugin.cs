@@ -18,10 +18,11 @@ namespace NavMeshInCompanyRedux
     {
         public const string PLUGIN_GUID = "T-Rizzle.NavMeshInCompanyRedux";
         public const string PLUGIN_NAME = "NavMeshInCompanyRedux";
-        public const string PLUGIN_VERSION = "1.0.0";
+        public const string PLUGIN_VERSION = "1.1.1";
     }
 
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
+    [BepInDependency("com.sigurd.csync", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
     {
         private const string COMPANY_BUILDING_MOON_SCENE_NAME = "71 Gordion.CompanyBuilding";

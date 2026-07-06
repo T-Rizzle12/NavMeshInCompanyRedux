@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.1 - 2026-07-6
+- Fixed CSync not being marked as a dependency for the mod
+
 ## 1.1.0 - 2026-07-5
 - Fixed dynamic NavMesh generation at the company building
 - Added some config options to control the dynamic regeneration of the Company Navmesh
