@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.0 - 2026-07-6
+We now override NavMeshInCompany when both mods are present
+
 ## 1.1.1 - 2026-07-6
 - Fixed CSync not being marked as a dependency for the mod
 

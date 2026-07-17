@@ -1,4 +1,5 @@
 ﻿using BepInEx;
+using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -18,11 +19,12 @@ namespace NavMeshInCompanyRedux
     {
         public const string PLUGIN_GUID = "T-Rizzle.NavMeshInCompanyRedux";
         public const string PLUGIN_NAME = "NavMeshInCompanyRedux";
-        public const string PLUGIN_VERSION = "1.1.1";
+        public const string PLUGIN_VERSION = "1.2.0";
     }
 
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
     [BepInDependency("com.sigurd.csync", BepInDependency.DependencyFlags.HardDependency)]
+    [BepInDependency(Kittenji.NavMeshInCompany.Plugin.pluginGUID, BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         private const string COMPANY_BUILDING_MOON_SCENE_NAME = "71 Gordion.CompanyBuilding";
@@ -61,6 +63,19 @@ namespace NavMeshInCompanyRedux
             }
 
             SceneManager.sceneLoaded += OnSceneLoaded;
+
+            // Override the default NavMeshInCompany
+            try
+            {
+                if (Chainloader.PluginInfos.ContainsKey(Kittenji.NavMeshInCompany.Plugin.pluginGUID))
+                {
+                    _harmony.PatchAll(typeof(NavMeshInCompanyPatch));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to patch with error {ex}");
+            }
 
             Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
         }
