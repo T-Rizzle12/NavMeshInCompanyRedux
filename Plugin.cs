@@ -19,7 +19,7 @@ namespace NavMeshInCompanyRedux
     {
         public const string PLUGIN_GUID = "T-Rizzle.NavMeshInCompanyRedux";
         public const string PLUGIN_NAME = "NavMeshInCompanyRedux";
-        public const string PLUGIN_VERSION = "1.1.1";
+        public const string PLUGIN_VERSION = "1.2.0";
     }
 
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
