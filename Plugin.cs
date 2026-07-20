@@ -7,6 +7,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Unity.AI.Navigation;
 using UnityEngine;
@@ -185,20 +186,19 @@ namespace NavMeshInCompanyRedux
                     {
                         UnityEngine.Object.Destroy(array[i]);
                     }
-                    companyTransform = UnityEngine.Object.Instantiate(Plugin.CompanyBuildingNavMeshPrefab).transform;
+                    companyTransform = ((GameObject)UnityEngine.Object.Instantiate(Plugin.CompanyBuildingNavMeshPrefab, scene)).transform;
                 }
 
                 // Make sure our prefab is lined up correctly!
-                GameObject? navMeshColliders = GameObject.Find("NavMeshColliders");
+                GameObject? environmentObject = sceneObjects.FirstOrDefault(x => x.name.Equals("Environment", StringComparison.InvariantCultureIgnoreCase));
+                Transform? navMeshColliders = environmentObject != null ? environmentObject.transform.Find("NavMeshColliders") : null;
                 if (navMeshColliders != null)
                 {
                     // Move to the NavMeshColliders object.
                     Plugin.LogInfo("Found NavMeshColliders!");
-                    companyTransform.SetParent(navMeshColliders.transform, worldPositionStays: true);
+                    Transform oldShipNav = navMeshColliders.Find("PlayerShip");
                     companyTransform.position = navMeshColliders.transform.position;
                     companyTransform.rotation = navMeshColliders.transform.rotation;
-
-                    Transform oldShipNav = navMeshColliders.transform.Find("PlayerShip");
                     if (oldShipNav != null)
                     {
                         Plugin.LogInfo("Found old ShipNavmesh, destroying it!");
@@ -208,9 +208,11 @@ namespace NavMeshInCompanyRedux
                 else
                 {
                     // As where it is located in the Unity Editor.
+                    // HACKHACK: For some reason, the position offsets I put in the editor don't want to be loaded here.
+                    // So I force them to work
+                    companyTransform.position = new Vector3(-17.4388561f, 7.60538054f, -16.4713039f);
+                    companyTransform.rotation = Quaternion.identity;
                     Plugin.LogWarning("Failed to find NavMeshColliders!");
-                    UnityEngine.Object.Destroy(companyTransform.gameObject);
-                    return;
                 }
 
                 // Update the AI nodes in the RoundManager to point to the new ones we just instantiated.
@@ -238,7 +240,8 @@ namespace NavMeshInCompanyRedux
                         return;
                     }
 
-                    instanceRM.StartCoroutine(UpdateNavmeshDelayed(navMeshSurfaces));
+                    instanceRM.StartCoroutine(UpdateNavmeshDelayed(companyTransform, navMeshSurfaces));
+                    return;
                 }
 
                 // Now, we need to update start and endpoints of the NavMeshLink and OffMeshLink components.
@@ -263,7 +266,7 @@ namespace NavMeshInCompanyRedux
             }
         }
 
-        private static IEnumerator UpdateNavmeshDelayed(NavMeshSurface[] surfacesToRebake)
+        private static IEnumerator UpdateNavmeshDelayed(Transform? companyTransform, NavMeshSurface[] surfacesToRebake)
         {
             // Wait for a short delay to allow any mod added buildings to be spawned before we rebuild the navmesh.
             if (Plugin.Config.DeferedDynamicRegen.Value)
@@ -323,6 +326,25 @@ namespace NavMeshInCompanyRedux
                 {
                     Plugin.LogWarning("Found a null NavMeshSurface in the list to rebake, skipping it.");
                 }
+            }
+
+            // Now, we need to update start and endpoints of the NavMeshLink and OffMeshLink components.
+            if (companyTransform)
+            {
+                NavMeshLink[] navMeshLinks = companyTransform.gameObject.GetComponentsInChildren<NavMeshLink>(includeInactive: true);
+                foreach (NavMeshLink navMeshLink in navMeshLinks)
+                {
+                    navMeshLink.UpdateLink();
+                }
+
+                // Until Zeekerss stops using the obsolete OffMeshLink component, we need to disable the warning for it.
+                #pragma warning disable CS0618 // Type or member is obsolete
+                OffMeshLink[] offMeshLinks = companyTransform.gameObject.GetComponentsInChildren<OffMeshLink>(includeInactive: true);
+                foreach (OffMeshLink offMeshLink in offMeshLinks)
+                {
+                    offMeshLink.UpdatePositions();
+                }
+                #pragma warning restore CS0618 // Type or member is obsolete
             }
 
             Plugin.LogDebug("Updated all given NavMeshes.");

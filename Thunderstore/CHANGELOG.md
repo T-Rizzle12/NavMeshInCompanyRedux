@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.1 - 2062-07-20
+Fixed a rare issue where the company NavMesh would parent itself to the wrong object and fail to clean itself after the ship leaves the company building.
+
 ## 1.2.0 - 2026-07-6
 We now override NavMeshInCompany when both mods are present
 
