@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0 - 2026-09-8
+A minor backend change has been made to use NavMeshLib. 
+Custom NavMeshAgent IDs should now be automatically supported as a result.
+
 ## 1.2.2 - 2026-07-20
 Actually update the Changelog file...........
 

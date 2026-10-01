@@ -3,6 +3,7 @@ using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using NavMeshLib;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -20,7 +21,7 @@ namespace NavMeshInCompanyRedux
     {
         public const string PLUGIN_GUID = "T-Rizzle.NavMeshInCompanyRedux";
         public const string PLUGIN_NAME = "NavMeshInCompanyRedux";
-        public const string PLUGIN_VERSION = "1.2.0";
+        public const string PLUGIN_VERSION = "1.3.0";
     }
 
     [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
@@ -233,14 +234,7 @@ namespace NavMeshInCompanyRedux
                 // Update the NavMeshSurface component to ensure the navmesh is built and up-to-date.
                 if (Plugin.Config.EnableDynamicRegen.Value)
                 {
-                    NavMeshSurface[] navMeshSurfaces = companyTransform.gameObject.GetComponentsInChildren<NavMeshSurface>(includeInactive: true);
-                    if (navMeshSurfaces == null || navMeshSurfaces.Length == 0)
-                    {
-                        Plugin.LogError("Failed to find any NavMeshSurface components on the instantiated prefab.");
-                        return;
-                    }
-
-                    instanceRM.StartCoroutine(UpdateNavmeshDelayed(companyTransform, navMeshSurfaces));
+                    instanceRM.StartCoroutine(UpdateNavmeshDelayed(companyTransform));
                     return;
                 }
 
@@ -266,7 +260,7 @@ namespace NavMeshInCompanyRedux
             }
         }
 
-        private static IEnumerator UpdateNavmeshDelayed(Transform? companyTransform, NavMeshSurface[] surfacesToRebake)
+        private static IEnumerator UpdateNavmeshDelayed(Transform? companyTransform)
         {
             // Wait for a short delay to allow any mod added buildings to be spawned before we rebuild the navmesh.
             if (Plugin.Config.DeferedDynamicRegen.Value)
@@ -278,58 +272,77 @@ namespace NavMeshInCompanyRedux
                 yield return new WaitForSeconds(1.0f);
             }
 
-            // Lets go and rebake the navmesh for all the surfaces we found!
-            foreach (var navMeshSurface in surfacesToRebake)
+            // Make sure the company transform is valid
+            if (companyTransform == null)
             {
-                if (navMeshSurface != null)
+                yield break;
+            }
+
+            // This exists to allow us to add custom NavMeshSurfaces for all custom agent
+            // types that were registered earlier
+            // NOTE: We don't use NavMeshLib here as the NavMeshInCompanyRedux needs much more special logic for this case.
+            NavMeshSurface[] existingSurfaces = companyTransform.gameObject.GetComponentsInChildren<NavMeshSurface>(includeInactive: true);
+            HashSet<NavMeshSurface> surfacesToRebake = new HashSet<NavMeshSurface>();
+            for (int i = 0; i < existingSurfaces.Length; i++)
+            { 
+                // Go through each surface we found and make sure it works for ALL custom NavMeshAgent IDs
+                NavMeshSurface existingSurface = existingSurfaces[i];
+                GameObject existingObject = existingSurface.gameObject;
+                int settingsCount = NavMesh.GetSettingsCount();
+                for (int j = 0; j < settingsCount; j++)
                 {
-                    // Log about what we are updating!
-                    Plugin.LogDebug($"Updating NavMesh for surface {navMeshSurface.gameObject.name} with {navMeshSurface.GetComponentsInChildren<NavMeshModifierVolume>().Length} modifiers.");
-
-                    // Make this is enabled!
-                    bool wasEnabled = navMeshSurface.enabled;
-                    navMeshSurface.enabled = true;
-
-                    // Build our new mesh!
-                    // If the navmesh data already exists, we can use async update to avoid blocking the main thread.
-                    NavMeshData? navMeshData = navMeshSurface.navMeshData;
-                    if (navMeshData != null)
+                    // Get the settings and the already existing surfaces
+                    NavMeshBuildSettings settings = NavMesh.GetSettingsByIndex(j);
+                    NavMeshSurface navMeshSurface = (from s in existingObject.GetComponents<NavMeshSurface>()
+                                                     where s.agentTypeID == settings.agentTypeID
+                                                     select s).FirstOrDefault();
+                    Plugin.LogDebug($"Checking NavMeshSurface for agent ID {settings.agentTypeID} at index {j}. Exterior surface null? {navMeshSurface == null}");
+                    if (navMeshSurface == null)
                     {
-                        AsyncOperation asyncOperation = navMeshSurface.UpdateNavMesh(navMeshData);
-                        while (asyncOperation != null && !asyncOperation.isDone)
+                        // Copy what the other exterior NavmeshSurface had
+                        navMeshSurface = existingObject.AddComponent<NavMeshSurface>();
+                        navMeshSurface.agentTypeID = settings.agentTypeID;
+                        navMeshSurface.defaultArea = existingSurface.defaultArea;
+                        navMeshSurface.useGeometry = existingSurface.useGeometry;
+                        navMeshSurface.collectObjects = existingSurface.collectObjects;
+                        if (existingSurface.collectObjects == CollectObjects.Volume)
                         {
-                            yield return null;
+                            navMeshSurface.center = existingSurface.center;
+                            navMeshSurface.size = existingSurface.size;
                         }
+                        navMeshSurface.layerMask = existingSurface.layerMask;
+                        navMeshSurface.minRegionArea = existingSurface.minRegionArea;
+                    }
+
+                    // This is how Loadstone used to do it
+                    NavMeshData navMeshData = navMeshSurface.navMeshData;
+                    if (navMeshData == null)
+                    {
+                        // This is how BakeNavMesh creates the new data struct, we mimic that here 
+                        navMeshData = new NavMeshData(navMeshSurface.GetBuildSettings().agentTypeID)
+                        {
+                            position = navMeshSurface.transform.position,
+                            rotation = navMeshSurface.transform.rotation
+                        };
+                        navMeshSurface.navMeshData = navMeshData;
                     }
                     else
                     {
-                        navMeshSurface.BuildNavMesh();
+                        // Make sure we have the correct position and rotation
+                        navMeshData.position = navMeshSurface.transform.position;
+                        navMeshData.rotation = navMeshSurface.transform.rotation;
                     }
 
-                    // Update the NavMeshData!
-                    Plugin.LogDebug($"UpdateNavMesh finished, refreshing surface data.");
-                    navMeshSurface.RemoveData();
-                    Plugin.LogDebug("Removed existing data.");
-
-                    // Only add the data back if it was enabled before,
-                    // otherwise we will leave it disabled.
-                    if (wasEnabled)
-                    {
-                        navMeshSurface.AddData();
-                        Plugin.LogDebug("Added updated data.");
-                    }
-
-                    // Set enabled status back to how it was before
-                    navMeshSurface.enabled = wasEnabled;
-                }
-                else
-                {
-                    Plugin.LogWarning("Found a null NavMeshSurface in the list to rebake, skipping it.");
+                    // Store the new surface
+                    surfacesToRebake.Add(navMeshSurface);
                 }
             }
 
+            // Lets go and rebake the navmesh for all the surfaces we found!
+            yield return NavMeshUtil.UpdateNavMeshDelayed(surfacesToRebake.ToArray());
+
             // Now, we need to update start and endpoints of the NavMeshLink and OffMeshLink components.
-            if (companyTransform)
+            if (companyTransform != null)
             {
                 NavMeshLink[] navMeshLinks = companyTransform.gameObject.GetComponentsInChildren<NavMeshLink>(includeInactive: true);
                 foreach (NavMeshLink navMeshLink in navMeshLinks)
