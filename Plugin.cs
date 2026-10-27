@@ -251,6 +251,9 @@ namespace NavMeshInCompanyRedux
                 foreach (OffMeshLink offMeshLink in offMeshLinks)
                 {
                     offMeshLink.UpdatePositions();
+
+                    // Now we need to also accomodate for other agent ids
+                    NavMeshUtil.CopyOffMeshLink(offMeshLink);
                 }
                 #pragma warning restore CS0618 // Type or member is obsolete
             }
@@ -356,6 +359,9 @@ namespace NavMeshInCompanyRedux
                 foreach (OffMeshLink offMeshLink in offMeshLinks)
                 {
                     offMeshLink.UpdatePositions();
+
+                    // Now we need to also accomodate for other agent ids
+                    NavMeshUtil.CopyOffMeshLink(offMeshLink);
                 }
                 #pragma warning restore CS0618 // Type or member is obsolete
             }
